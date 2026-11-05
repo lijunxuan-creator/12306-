@@ -1,0 +1,26 @@
+# ---------- Python 运行时 ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---------- 你的私人配置 ----------
+# config.json 里有乘客姓名、可能还有 token / 邮箱授权码，绝对不要提交
+config.json
+
+# ---------- 运行时会自动生成 ----------
+logs/
+data/monitor.db
+data/monitor.db-shm
+data/monitor.db-wal
+
+# ---------- 这个必须保留 ----------
+# 车站字典是项目自带的，删了就跑不起来，别忽略它
+!data/stations.json
+
+# ---------- 编辑器 / 系统杂项 ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>12306 余票监控看板</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2430;
+    --line: #263041;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #2ea043;
+    --green-soft: #17361f;
+    --amber: #d29922;
+    --red: #f85149;
+    --blue: #388bfd;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #141a23, #0f141b);
+    position: sticky; top: 0; z-index: 10;
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); display: inline-block; margin-right: 6px; }
+  .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .pill {
+    padding: 2px 9px; border-radius: 999px; font-size: 12px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  }
+  .pill b { color: var(--text); font-weight: 600; }
+  .spacer { flex: 1; }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: #3d4a5c; background: #212b38; }
+  main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; padding: 18px 22px 40px; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  section h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .task-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .route { font-size: 15px; font-weight: 600; }
+  .task-meta { color: var(--muted); font-size: 12px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .tag {
+    font-size: 12px; padding: 1px 8px; border-radius: 6px;
+    background: var(--panel-2); color: #b8c4d4; border: 1px solid var(--line);
+  }
+  .tag.date { border-color: #2b3b52; color: #9db7d4; }
+  .tag.seat { border-color: #2f4a3a; color: #8fd3a2; }
+  .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+  .last { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 12.5px; }
+  .ok { color: var(--green); }
+  .warn { color: var(--amber); }
+  .bad { color: var(--red); }
+  .muted { color: var(--muted); }
+  .alert {
+    border-left: 3px solid var(--green); background: var(--green-soft);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+    animation: flash 1.2s ease-out;
+  }
+  .alert.waitlist { border-left-color: var(--amber); background: #33280f; }
+  @keyframes flash { from { transform: scale(1.015); filter: brightness(1.5); } to { transform: none; filter: none; } }
+  .alert .t { font-weight: 600; }
+  .alert .s { font-size: 12.5px; color: #c8d4e2; margin-top: 3px; }
+  .alert .m { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #1e2632; }
+  th { color: var(--muted); font-weight: 500; }
+  .seat-hit { color: var(--green); font-weight: 600; }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  .banner {
+    margin: 0 22px; padding: 11px 14px; border-radius: 9px;
+    background: #2a2110; border: 1px solid #4d3a12; color: #e5c07b; font-size: 13px;
+  }
+  .banner.hide { display: none; }
+  footer { padding: 0 22px 30px; color: var(--muted); font-size: 12px; }
+  code { background: #11161d; border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="dot"></span>12306 余票监控</h1>
+  <span class="pill">任务 <b id="stat-tasks">-</b></span>
+  <span class="pill">在线脚本 <b id="stat-clients">-</b></span>
+  <span class="pill">累计告警 <b id="stat-alerts">-</b></span>
+  <span class="pill">已查询 <b id="stat-cycles">-</b> 轮</span>
+  <span class="pill" id="stat-uptime">-</span>
+  <span class="spacer"></span>
+  <button id="btn-clear">清空告警记录</button>
+</header>
+
+<div class="banner hide" id="banner"></div>
+
+<main>
+  <div>
+    <section>
+      <h2>监控任务</h2>
+      <div id="tasks"></div>
+    </section>
+    <section>
+      <h2>最近一次查询明细</h2>
+      <div class="card" id="detail"></div>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>命中告警</h2>
+      <div id="alerts"><div class="card empty">暂无告警。命中后这里会亮起，同时弹出桌面通知。</div></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  查询由你本人登录的 12306 页面完成，本看板只负责调度、判定与提醒；下单与支付请在浏览器里自行完成。
+  <span id="foot-meta"></span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN = new URLSearchParams(location.search).get("token") || sessionStorage.getItem("t12306_token") || "";
+  if (TOKEN) sessionStorage.setItem("t12306_token", TOKEN);
+
+  var state = null;
+  var es = null;
+
+  function api(path, options) {
+    var headers = { "Content-Type": "application/json" };
+    if (TOKEN) headers["X-Token"] = TOKEN;
+    return fetch(path, Object.assign({ headers: headers }, options || {})).then(function (r) {
+      return r.json();
+    });
+  }
+
+  function esc(text) {
+    return String(text == null ? "" : text).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function timeStr(ts) {
+    if (!ts) return "-";
+    var d = new Date(ts * 1000);
+    return d.toLocaleTimeString("zh-CN", { hour12: false });
+  }
+
+  function ago(ts) {
+    if (!ts) return "-";
+    var s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+    if (s < 60) return s + " 秒前";
+    if (s < 3600) return Math.round(s / 60) + " 分钟前";
+    return Math.round(s / 3600) + " 小时前";
+  }
+
+  function setDot(on) {
+    var dot = document.getElementById("dot");
+    dot.className = "dot" + (on ? " on" : "");
+  }
+
+  function renderStats(s) {
+    var stats = s.stats || {};
+    document.getElementById("stat-tasks").textContent = (s.tasks || []).length;
+    document.getElementById("stat-clients").textContent = stats.clients_online || 0;
+    document.getElementById("stat-alerts").textContent = (s.alerts || []).length;
+    document.getElementById("stat-cycles").textContent = stats.cycles || 0;
+    var up = s.uptime_seconds || 0;
+    document.getElementById("stat-uptime").textContent = "运行 " + Math.floor(up / 3600) + "h" + Math.floor((up % 3600) / 60) + "m";
+
+    var banner = document.getElementById("banner");
+    if ((stats.clients_online || 0) === 0) {
+      banner.classList.remove("hide");
+      banner.innerHTML = "未检测到浏览器端脚本在线：请在 12306 查票页安装并启用 Tampermonkey 脚本（见 <code>userscript/</code>），并确认服务地址一致。";
+    } else if (s.stopped) {
+      banner.classList.remove("hide");
+      banner.innerHTML = "已到配置的 <code>stop_at</code> 停止时间，不再发放新查询计划。";
+    } else {
+      banner.classList.add("hide");
+    }
+  }
+
+  function renderTasks(tasks) {
+    var host = document.getElementById("tasks");
+    if (!tasks || !tasks.length) {
+      host.innerHTML = '<div class="card empty">没有任务，请编辑配置文件后重启服务。</div>';
+      return;
+    }
+    host.innerHTML = tasks.map(function (task) {
+      var last = task.last;
+      var lastHtml = '<div class="last muted">尚未查询</div>';
+      if (last) {
+        var hit = (last.new_alerts || []).length;
+        var cls = last.ok ? (hit ? "ok" : "muted") : "bad";
+        var text = last.ok
+          ? last.row_count + " 个车次 / " + (hit ? hit + " 处命中" : "未命中")
+          : "查询失败：" + esc(last.error || "未知原因");
+        lastHtml =
+          '<div class="last">' +
+          '<div class="row"><span class="' + cls + '">' + esc(text) + "</span>" +
+          '<span class="muted">' + timeStr(last.ts) + " · 第 " + (last.cycle || 1) + " 轮 · " + (last.elapsed || 0) + "s</span></div>" +
+          (last.warnings && last.warnings.length
+            ? '<div class="warn" style="font-size:11.5px;margin-top:4px">⚠ ' + esc(last.warnings.join("；")) + "</div>"
+            : "") +
+          "</div>";
+      }
+      var dates = (task.dates || []).map(function (d) { return '<span class="tag date">' + esc(d) + "</span>"; }).join("");
+      var seats = (task.seats || []).map(function (s) { return '<span class="tag seat">' + esc(s) + "</span>"; }).join("");
+      var trains = (task.trains && task.trains.length)
+        ? '<span class="tag">车次 ' + esc(task.trains.join(" ")) + "</span>"
+        : '<span class="tag">全部车次</span>';
+      var state = task.enabled ? "" : '<span class="tag" style="color:#f0a">已停用</span>';
+      var jump = task.auto_jump ? '<span class="tag" style="border-color:#4a3a2b;color:#e0b47a">命中自动跳预订</span>' : "";
+      var submitTag = task.auto_submit ? '<span class="tag" style="border-color:#4a2b2b;color:#e79a9a">自动提交</span>' : "";
+      return (
+        '<div class="card">' +
+        '<div class="task-head"><span class="route">' + esc(task.route) + "</span>" +
+        '<span class="task-meta">' + esc(task.id) + (task.note ? " · " + esc(task.note) : "") + "</span>" + state + "</div>" +
+        '<div class="tags">' + dates + seats + trains + jump + submitTag + "</div>" +
+        lastHtml +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function renderAlerts(alerts) {
+    var host = document.getElementById("alerts");
+    if (!alerts || !alerts.length) {
+      host.innerHTML = '<div class="card empty">暂无告警。命中后这里会亮起，同时弹出桌面通知。</div>';
+      return;
+    }
+    host.innerHTML = alerts.map(function (a) {
+      var cls = a.level === "waitlist" ? "alert waitlist" : "alert";
+      var badge = a.level === "waitlist" ? "候补" : "有票";
+      return (
+        '<div class="' + cls + '">' +
+        '<div class="row"><span class="t">' + esc(a.date) + " " + esc(a.train) + " · " + esc(a.seat) + "</span>" +
+        '<span class="pill">' + badge + "</span></div>" +
+        '<div class="s">' + esc(a.message) + "</div>" +
+        '<div class="m">' + timeStr(a.ts) + " · " + ago(a.ts) + " · " + esc(a.route || "") + "</div>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function renderDetail(tasks) {
+    var withRows = (tasks || []).filter(function (t) { return t.last && (t.last.rows || []).length; });
+    if (!withRows.length) {
+      document.getElementById("detail").innerHTML = '<div class="empty">还没有查询结果。</div>';
+      return;
+    }
+    var html = withRows.map(function (task) {
+      var last = task.last;
+      var rows = (last.rows || []).slice(0, 14);
+      var body = rows.map(function (r) {
+        var hits = Object.keys(r.hits || {}).map(function (k) {
+          return k + "：" + esc(r.hits[k]);
+        }).join("，");
+        return "<tr><td>" + esc(r.train) + "</td><td>" + esc(r.dep) + " → " + esc(r.arr) + "</td><td>" + (hits || '<span class="muted">无</span>') + "</td></tr>";
+      }).join("");
+      return (
+        '<div class="card"><div class="row" style="margin-bottom:6px">' +
+        "<b>" + esc(task.route) + "</b>" +
+        '<span class="muted">' + esc(last.date) + " · " + timeStr(last.ts) + "</span></div>" +
+        "<table><thead><tr><th>车次</th><th>时间</th><th>有票席别</th></tr></thead><tbody>" +
+        body + "</tbody></table></div>"
+      );
+    }).join("");
+    document.getElementById("detail").innerHTML = html;
+  }
+
+  function render(s) {
+    state = s;
+    renderStats(s);
+    renderTasks(s.tasks);
+    renderAlerts(s.alerts);
+    renderDetail(s.tasks);
+    document.getElementById("foot-meta").textContent = " 服务时间：" + new Date().toLocaleString("zh-CN");
+  }
+
+  function refresh() {
+    api("/api/state").then(render).catch(function () { setDot(false); });
+  }
+
+  function connect() {
+    if (es) es.close();
+    var url = "/api/events" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : "");
+    es = new EventSource(url);
+    es.onopen = function () { setDot(true); };
+    es.onerror = function () { setDot(false); };
+    es.addEventListener("state", function (e) { render(JSON.parse(e.data)); });
+    es.addEventListener("status", function (e) {
+      var s = JSON.parse(e.data);
+      if (!state) return;
+      var merged = Object.assign({}, state, s);
+      state = merged;
+      renderStats(merged);
+      document.getElementById("stat-clients").textContent = (s.stats || {}).clients_online || 0;
+      document.getElementById("stat-cycles").textContent = (s.stats || {}).cycles || 0;
+    });
+    es.addEventListener("alert", function (e) {
+      var a = JSON.parse(e.data);
+      refresh();
+      if (window.Notification && Notification.permission === "granted") {
+        new Notification("12306 有票：" + a.train, { body: a.message });
+      }
+    });
+    es.addEventListener("report", function () { refresh(); });
+  }
+
+  document.getElementById("btn-clear").addEventListener("click", function () {
+    if (!confirm("清空所有告警记录？")) return;
+    api("/api/alerts/clear", { method: "POST" }).then(refresh);
+  });
+
+  if (window.Notification && Notification.permission === "default") {
+    document.body.addEventListener("click", function once() {
+      Notification.requestPermission();
+      document.body.removeEventListener("click", once);
+    });
+  }
+
+  refresh();
+  connect();
+  setInterval(refresh, 15000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "token": null
+  },
+  "poll": {
+    "interval_seconds": 8,
+    "jitter_seconds": 3,
+    "plan_ttl_seconds": 90,
+    "stop_at": null,
+    "burst": null
+  },
+  "notify": {
+    "console": true,
+    "desktop": true,
+    "sound": true,
+    "dedupe_seconds": 300,
+    "webhook": {
+      "enabled": false,
+      "kind": "generic",
+      "url": "",
+      "headers": {}
+    },
+    "email": {
+      "enabled": false,
+      "smtp_host": "smtp.qq.com",
+      "smtp_port": 465,
+      "ssl": true,
+      "user": "you@example.com",
+      "password": "邮箱授权码，不是登录密码",
+      "to": ["you@example.com"]
+    }
+  },
+  "tasks": [
+    {
+      "id": "beijing-shanghai",
+      "enabled": true,
+      "note": "示例：北京南到上海虹桥，只盯 G 字头",
+      "from": "北京南",
+      "to": "上海虹桥",
+      "dates": ["2026-11-10", "2026-11-11"],
+      "trains": ["G1", "G3", "G5", "G7"],
+      "seats": ["二等座", "一等座"],
+      "min_count": 1,
+      "allow_waitlist": false,
+      "auto_jump": false,
+      "auto_submit": false,
+      "passengers": []
+    },
+    {
+      "id": "shenzhen-gz",
+      "enabled": false,
+      "note": "示例：深圳北到广州南，不限定车次，接受候补",
+      "from": "深圳北",
+      "to": "广州南",
+      "dates": ["2026-11-10"],
+      "trains": [],
+      "seats": ["二等座"],
+      "min_count": 2,
+      "allow_waitlist": true,
+      "auto_jump": false,
+      "passengers": ["张三"]
+    }
+  ]
+}
